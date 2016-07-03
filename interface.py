@@ -185,7 +185,6 @@ class TextBufferExt (Gtk.TextBuffer):
         return self.get_iter_at_mark (self.get_insert())
 
     # private:
-    '''
     def do_insert_text (self, iter, text, length):
         if not self.ignore_event:
             action = ('i', iter.get_offset(), text)
@@ -211,7 +210,6 @@ class TextBufferExt (Gtk.TextBuffer):
             self.ignore_event = True
             self.delete (iter, end_iter)
             self.ignore_event = False
-    '''
 
 GObject.type_register (TextBufferExt)
 
@@ -224,9 +222,7 @@ class EditorBuffer (TextBufferExt):
         self.create_tag("assign",  foreground="darkred")  # eg: function:
         self.create_tag("instruction", weight=Pango.Weight.BOLD)  # eg: loadn
         self.create_tag("error", underline=Pango.Underline.ERROR)
-        '''
         self.connect_after("notify::cursor-position", self.cursor_moved_cb)
-        '''
 
         self.cursor_line = 0
         self.line_edited = False  # was current line edited?
@@ -352,7 +348,6 @@ class EditorBuffer (TextBufferExt):
                     end_it = splits[length-1].end_it
                     self.apply_tag_by_name ("error", start_it, end_it)
 
-    '''
     def cursor_moved_cb (self, buffer, pos_ptr):
         line = self.get_insert_iter().get_line()
         if line != self.cursor_line:
@@ -397,7 +392,6 @@ class EditorBuffer (TextBufferExt):
         Gtk.TextBuffer.do_changed (self)
         mark = self.get_mark ("emacs-mark")
         if mark: self.delete_mark (mark)
-    '''
 
 # The Editor widget, an extension over Gtk.TextView to support eg. line numbering
 class Editor (Gtk.TextView):
@@ -406,11 +400,6 @@ class Editor (Gtk.TextView):
         RUN  = 1
         def __init__ (self, editor):
             self.editor = editor
-            # Save normal/sensitive base color so we can mess with that
-            '''
-            self.normal_color = editor.style.base [Gtk.STATE_NORMAL]
-            self.insensitive_color = editor.style.base [Gtk.STATE_INSENSITIVE]
-            '''
             self.line_color = None
             self.set_mode (None)
 
@@ -433,10 +422,7 @@ class Editor (Gtk.TextView):
             editable = self.mode == self.EDIT
             self.editor.set_editable (editable)
             self.editor.set_cursor_visible (editable)
-            '''
-            if editable: self.editor.modify_base (Gtk.STATE_NORMAL, self.normal_color)
-            else:        self.editor.modify_base (Gtk.STATE_NORMAL, self.insensitive_color)
-            '''
+            self.editor.set_name('editable' if editable else 'readonly')
 
         def set_current_line (self, line):
             if self.mode == self.EDIT:
@@ -524,9 +510,7 @@ class Editor (Gtk.TextView):
         self.mode = Editor.Mode(self)
 
         buffer.connect ("changed", self.text_changed)
-        '''
         self.connect_after ("move-cursor", buffer.cursor_moved)  # for the emacs mark
-        '''
 
     def get_text (self):
         buffer = self.get_buffer()
@@ -1431,10 +1415,8 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
             edit_button.hide()
 
         self.counter = builder.get_object ("counter_entry")
+        self.counter.set_name('counter_entry')
         self.timer = builder.get_object ("timer_entry")
-        '''
-        self.counter.modify_text (Gtk.STATE_NORMAL, Gtk.gdk.Color (0, 0, 0xffff))
-        '''
 
         self.output = builder.get_object ("output_view")
         set_monospace_font (self.output)
@@ -1471,13 +1453,6 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
 
         builder.get_object ("memory_label_column2")
         self.message = builder.get_object ("info_label")
-        '''
-        # glade 3.6.7 didn't handle PangoScale well, so setting these manually
-        attrbs = Pango.AttrList()
-        attrbs.insert (Pango.Attribute.weight_new (Pango.Weight.BOLD, 0, -1))
-        attrbs.insert (Pango.AttrScale (Pango.SCALE_X_LARGE, 0, -1))
-        self.message.set_attributes (attrbs)
-        '''
 
         top = builder.get_object ("top")
         top.reparent (self)
@@ -2318,10 +2293,18 @@ if __name__ == "__main__":
         print "Usage: " + argv[0] + " --tester filename"
         sys.exit (1)
 
+    # load our own CSS settings
+    css = Gtk.CssProvider()
+    css.load_from_path('ui/style.css')
+    style = Gtk.StyleContext()
+    style.add_provider_for_screen(Gdk.Screen.get_default(), css,
+        Gtk.STYLE_PROVIDER_PRIORITY_USER)
+
     # go on, now
     read_config()
 
     Window (filenames)
+
     Gtk.main()
 
     write_config()

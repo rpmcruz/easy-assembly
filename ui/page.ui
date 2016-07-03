@@ -198,6 +198,7 @@
                         </child>
                         <child>
                           <object class="GtkEntry" id="counter_entry">
+                            <property name="name">counter_entry</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
                             <property name="editable">False</property>
@@ -585,6 +586,7 @@
                     <property name="visible">True</property>
                     <child>
                       <object class="GtkLabel" id="info_label">
+                        <property name="name">info_label</property>
                         <property name="visible">True</property>
                         <property name="label" translatable="yes">Ready</property>
                         <property name="selectable">True</property>
