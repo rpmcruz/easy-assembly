@@ -21,7 +21,13 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 import os, sys
 import ConfigParser
-import gtk, pango, gobject
+
+import gi
+gi.require_version('Gtk', '3.0')
+gi.require_version('Gdk', '3.0')
+gi.require_version('Pango', '1.0')
+gi.require_version('GObject', '2.0')
+from gi.repository import Gtk, Gdk, Pango, GObject
 
 from vpu import *
 from constants import *
@@ -78,18 +84,18 @@ def reverse_lookup (dict, value):
     return None
 
 def show_error (text):
-    windows = gtk.window_list_toplevels()
+    windows = Gtk.window_list_toplevels()
     parent = None
     if len (windows) > 0:
         parent = windows[-1]
-    dialog = gtk.MessageDialog (parent, 0, gtk.MESSAGE_ERROR,
-        gtk.BUTTONS_CLOSE, "Error")
+    dialog = Gtk.MessageDialog (parent, 0, Gtk.MESSAGE_ERROR,
+        Gtk.ButtonsType.CLOSE, "Error")
     dialog.format_secondary_text (text)
     dialog.run()
     dialog.destroy()
 
 def builder_from_file (filename):
-    builder = gtk.Builder()
+    builder = Gtk.Builder()
     if builder.add_from_file (DATA_PATH + filename) == 0:
         show_error ("Couldn't load UI file: " + filename)
         return None
@@ -107,7 +113,7 @@ def set_monospace_font (widget):
 def get_tone_color (style, tone):
     # we find the highest color component, and calculate the ratios accordingly
     # so, eg: (84, 151, 213) -> (0.39, 0.71, 1.00)
-    syscolor = style.bg [gtk.STATE_SELECTED]
+    syscolor = style.bg [Gtk.STATE_SELECTED]
     max_color = max (max (syscolor.red, syscolor.green), syscolor.blue)
     red_ratio   = (syscolor.red   * 1.0) / max_color
     green_ratio = (syscolor.green * 1.0) / max_color
@@ -117,16 +123,17 @@ def get_tone_color (style, tone):
     green = int (green_ratio * tone)
     blue  = int (blue_ratio  * tone)
     return get_color (red, green, blue)
+
 def get_color (red, green, blue):
-    return gtk.gdk.Color (red << 8, green << 8, blue << 8, 0)
+    return Gdk.RGBA (red << 8, green << 8, blue << 8, 0)
 
 ## Our own widgets
 
 # Extends GtkTextBuffer to add some basic functionality:
 # * undo/redo, * file reading/writting
-class TextBufferExt (gtk.TextBuffer):
+class TextBufferExt (Gtk.TextBuffer):
     def __init__ (self):
-        gtk.TextBuffer.__init__(self)
+        Gtk.TextBuffer.__init__(self)
         # actions stacks, so we can undo/redo
         self.undo_reset()
         self.ignore_event = False
@@ -178,19 +185,20 @@ class TextBufferExt (gtk.TextBuffer):
         return self.get_iter_at_mark (self.get_insert())
 
     # private:
+    '''
     def do_insert_text (self, iter, text, length):
         if not self.ignore_event:
             action = ('i', iter.get_offset(), text)
             self.do_stack [self.do_stack_ptr:] = [action]
             self.do_stack_ptr += 1
-        gtk.TextBuffer.do_insert_text (self, iter, text, length)
+        Gtk.TextBuffer.do_insert_text (self, iter, text, length)
 
     def do_delete_range (self, start_it, end_it):
         if not self.ignore_event:
             action = ('d', start_it.get_offset(), self.get_text (start_it, end_it, False))
             self.do_stack [self.do_stack_ptr:] = [action]
             self.do_stack_ptr += 1
-        gtk.TextBuffer.do_delete_range (self, start_it, end_it)
+        Gtk.TextBuffer.do_delete_range (self, start_it, end_it)
 
     def do (self, action, undo):
         iter = self.get_iter_at_offset (action[1])
@@ -203,19 +211,22 @@ class TextBufferExt (gtk.TextBuffer):
             self.ignore_event = True
             self.delete (iter, end_iter)
             self.ignore_event = False
+    '''
 
-gobject.type_register (TextBufferExt)
+GObject.type_register (TextBufferExt)
 
 # Extends GtkTextBuffer (actually our TextBufferExt) to add Editor-specific
 # functionality
 class EditorBuffer (TextBufferExt):
     def __init__ (self, editor):
         TextBufferExt.__init__(self)
-        self.create_tag("comment", foreground = "darkgrey",  style = pango.STYLE_OBLIQUE) 
-        self.create_tag("assign",  foreground = "darkred")  # eg: function:
-        self.create_tag("instruction", weight = pango.WEIGHT_BOLD)  # eg: loadn
-        self.create_tag("error", underline = pango.UNDERLINE_ERROR)
-        self.connect_after ("notify::cursor-position", self.cursor_moved_cb)
+        self.create_tag("comment", foreground="darkgrey", style=Pango.Style.OBLIQUE) 
+        self.create_tag("assign",  foreground="darkred")  # eg: function:
+        self.create_tag("instruction", weight=Pango.Weight.BOLD)  # eg: loadn
+        self.create_tag("error", underline=Pango.Underline.ERROR)
+        '''
+        self.connect_after("notify::cursor-position", self.cursor_moved_cb)
+        '''
 
         self.cursor_line = 0
         self.line_edited = False  # was current line edited?
@@ -227,6 +238,7 @@ class EditorBuffer (TextBufferExt):
             self.word = word
             self.start_it = start_it
             self.end_it = end_it
+
     def split_line (self, line):
         iter = self.get_iter_at_line (line)
         if iter.is_end():
@@ -237,7 +249,7 @@ class EditorBuffer (TextBufferExt):
                 iter.forward_char()
             if iter.ends_line(): break
             start_iter = iter.copy()
-            while not is_blank (iter.get_char()):
+            while not is_blank (iter.get_char()) and not iter.ends_line():
                 iter.forward_char()
             word = start_iter.get_text (iter).encode()
             splits += [EditorBuffer.Split (word, start_iter, iter.copy())]
@@ -340,6 +352,7 @@ class EditorBuffer (TextBufferExt):
                     end_it = splits[length-1].end_it
                     self.apply_tag_by_name ("error", start_it, end_it)
 
+    '''
     def cursor_moved_cb (self, buffer, pos_ptr):
         line = self.get_insert_iter().get_line()
         if line != self.cursor_line:
@@ -381,20 +394,23 @@ class EditorBuffer (TextBufferExt):
             self.select_range (self.get_iter_at_mark (self.get_insert()),
                                self.get_iter_at_mark (mark))
     def do_changed (self):  # disable emacs' mark region
-        gtk.TextBuffer.do_changed (self)
+        Gtk.TextBuffer.do_changed (self)
         mark = self.get_mark ("emacs-mark")
         if mark: self.delete_mark (mark)
+    '''
 
-# The Editor widget, an extension over gtk.TextView to support eg. line numbering
-class Editor (gtk.TextView):
+# The Editor widget, an extension over Gtk.TextView to support eg. line numbering
+class Editor (Gtk.TextView):
     class Mode(object):
         EDIT = 0
         RUN  = 1
         def __init__ (self, editor):
             self.editor = editor
             # Save normal/sensitive base color so we can mess with that
-            self.normal_color = editor.style.base [gtk.STATE_NORMAL]
-            self.insensitive_color = editor.style.base [gtk.STATE_INSENSITIVE]
+            '''
+            self.normal_color = editor.style.base [Gtk.STATE_NORMAL]
+            self.insensitive_color = editor.style.base [Gtk.STATE_INSENSITIVE]
+            '''
             self.line_color = None
             self.set_mode (None)
 
@@ -417,8 +433,10 @@ class Editor (gtk.TextView):
             editable = self.mode == self.EDIT
             self.editor.set_editable (editable)
             self.editor.set_cursor_visible (editable)
-            if editable: self.editor.modify_base (gtk.STATE_NORMAL, self.normal_color)
-            else:        self.editor.modify_base (gtk.STATE_NORMAL, self.insensitive_color)
+            '''
+            if editable: self.editor.modify_base (Gtk.STATE_NORMAL, self.normal_color)
+            else:        self.editor.modify_base (Gtk.STATE_NORMAL, self.insensitive_color)
+            '''
 
         def set_current_line (self, line):
             if self.mode == self.EDIT:
@@ -428,7 +446,7 @@ class Editor (gtk.TextView):
                 it = buffer.get_iter_at_line (line)
                 buffer.place_cursor (it)
                 # make line visible
-                self.editor.scroll_to_iter (it, 0.10)
+                self.editor.scroll_to_iter (it, 0.10, False, 0.5, 0.5)
                 self.fixed_line = line-1
             self.editor.queue_draw()  # update line highlight
 
@@ -444,7 +462,7 @@ class Editor (gtk.TextView):
                 iter = buffer.get_iter_at_mark (buffer.get_insert())
                 curline = iter.get_line()
 
-                fill_gc = self.editor.style.bg_gc [gtk.STATE_NORMAL]
+                fill_gc = self.editor.style.bg_gc [Gtk.STATE_NORMAL]
                 stroke_gc = None
             else:
                 curline = self.fixed_line
@@ -452,14 +470,14 @@ class Editor (gtk.TextView):
                 color = get_tone_color (self.editor.style, 255)
                 if self.line_color != None:
                     clr = self.line_color
-                    color = gtk.gdk.color_parse (clr)
+                    color = Gtk.gdk.color_parse (clr)
                 fill_gc = window.new_gc()
                 fill_gc.set_rgb_fg_color (color)
 
                 color = get_tone_color (self.editor.style, 150)
                 if self.line_color != None:
                     clr = self.line_color + "4"
-                    color = gtk.gdk.color_parse (clr)
+                    color = Gtk.gdk.color_parse (clr)
                 stroke_gc = window.new_gc()
                 stroke_gc.set_rgb_fg_color (color)
             return (curline, fill_gc, stroke_gc)
@@ -473,23 +491,27 @@ class Editor (gtk.TextView):
             return line
 
     def __init__ (self, parent):
-        buffer = EditorBuffer (self)
-        gtk.TextView.__init__ (self, buffer)
+        Gtk.TextView.__init__ (self)
+        buffer = EditorBuffer(self)
+        self.set_buffer(buffer)
         self.main_parent = parent
 
-        self.set_tabs (pango.TabArray (4, False))
+        self.set_tabs (Pango.TabArray (4, False))
         set_monospace_font (self)
-        self.set_wrap_mode (gtk.WRAP_WORD_CHAR)
+        self.set_wrap_mode (Gtk.WrapMode.WORD_CHAR)
         self.set_left_margin (1)
 
+        '''
         font_desc = self.get_pango_context().get_font_description()
         metrics = self.get_pango_context().get_metrics (font_desc, None)
-        self.digit_width = pango.PIXELS (metrics.get_approximate_digit_width())
-        self.digit_height =  pango.PIXELS (metrics.get_ascent())
-        self.digit_height += pango.PIXELS (metrics.get_descent())
+        self.digit_width = PANGO_PIXELS(metrics.get_approximate_digit_width())
+        self.digit_height = PANGO_PIXELS(metrics.get_ascent()) + PANGO_PIXELS(metrics.get_descent())
+        '''
+        self.digit_width = 15
+        self.digit_height = 10
 
         self.margin_digits = 99  # to force a margin calculation
-        self.text_changed (self.get_buffer())  # sets the numbering margin
+        self.text_changed(buffer)  # sets the numbering margin
 
         self.do_stack = [] # of type [ ('i', 30, "text"), ('d', 20,"other") ]
         # for re/undo
@@ -499,10 +521,12 @@ class Editor (gtk.TextView):
         self.settings = None
 
         # editor mode: edit, run, or error
-        self.mode = Editor.Mode (self)
+        self.mode = Editor.Mode(self)
 
         buffer.connect ("changed", self.text_changed)
+        '''
         self.connect_after ("move-cursor", buffer.cursor_moved)  # for the emacs mark
+        '''
 
     def get_text (self):
         buffer = self.get_buffer()
@@ -513,16 +537,16 @@ class Editor (gtk.TextView):
         curline, fill_gc, stroke_gc = self.mode.get_current_line (event.window)
 
         # left window -- draw line numbering
-        window = self.get_window (gtk.TEXT_WINDOW_LEFT)
+        window = self.get_window (Gtk.TEXT_WINDOW_LEFT)
         if event.window == window:
             visible_text = self.get_visible_rect()
             iter = self.get_iter_at_location (visible_text.x, visible_text.y)
 
-            layout = pango.Layout (self.get_pango_context())
+            layout = Pango.Layout (self.get_pango_context())
             last_loop = False
             while True:  # a do ... while would be nicer :/
                 rect = self.get_iter_location (iter)
-                x, y = self.buffer_to_window_coords (gtk.TEXT_WINDOW_LEFT, rect.x, rect.y)
+                x, y = self.buffer_to_window_coords (Gtk.TEXT_WINDOW_LEFT, rect.x, rect.y)
 
                 if y > event.area.y + event.area.height: break
                 if y + self.digit_height > event.area.y:
@@ -531,7 +555,7 @@ class Editor (gtk.TextView):
                     # draw a half arc at the numbering window to finish current line
                     # rectangle nicely.
                     if iter.get_line() == curline and stroke_gc != None:
-                        w = self.get_border_window_size (gtk.TEXT_WINDOW_LEFT)
+                        w = self.get_border_window_size (Gtk.TEXT_WINDOW_LEFT)
                         h = rect.height
                         window.draw_arc (fill_gc, True, 0, y, w, h, 90*64, 180*64)
                         window.draw_arc (stroke_gc, False, 0, y, w, h-1, 90*64, 180*64)
@@ -543,14 +567,14 @@ class Editor (gtk.TextView):
                     # draw a circle for break points
                     if self.mode.mode == Editor.Mode.RUN:
                         if iter.get_line() in self.breakpoints:
-                            color = gtk.gdk.Color (237 << 8, 146 << 8, 146 << 8, 0)
+                            color = Gtk.gdk.Color (237 << 8, 146 << 8, 146 << 8, 0)
                             gc = event.window.new_gc()
                             gc.set_rgb_fg_color (color)
-                            color = gtk.gdk.Color (180 << 8, 110 << 8, 110 << 8, 0)
+                            color = Gtk.gdk.Color (180 << 8, 110 << 8, 110 << 8, 0)
                             out_gc = event.window.new_gc()
                             out_gc.set_rgb_fg_color (color)
 
-                            w = self.get_border_window_size (gtk.TEXT_WINDOW_LEFT)
+                            w = self.get_border_window_size (Gtk.TEXT_WINDOW_LEFT)
                             h = rect.height
                             window.draw_arc (gc, True, 0, y, w, h, 0, 360*64)
                             window.draw_arc (out_gc, False, 0, y, w-1, h-1, 0, 360*64)
@@ -564,7 +588,7 @@ class Editor (gtk.TextView):
                             text = "<span foreground=\"blue\">" + text + "</span>"
 
                         layout.set_markup (text)
-                        self.style.paint_layout (window, gtk.STATE_NORMAL, False, event.area,
+                        self.style.paint_layout (window, Gtk.STATE_NORMAL, False, event.area,
                                                  self, "", 2, y, layout)
                 if last_loop:
                     break
@@ -572,12 +596,12 @@ class Editor (gtk.TextView):
                     last_loop = True
 
         # text window -- highlight current line
-        window = self.get_window (gtk.TEXT_WINDOW_TEXT)
+        window = self.get_window (Gtk.TEXT_WINDOW_TEXT)
         if event.window == window:
             # do the current line highlighting now
             iter = self.get_buffer().get_iter_at_line (curline)
             y, h = self.get_line_yrange (iter)
-            x, y = self.buffer_to_window_coords (gtk.TEXT_WINDOW_TEXT, 0, y)
+            x, y = self.buffer_to_window_coords (Gtk.TEXT_WINDOW_TEXT, 0, y)
             w = self.allocation.width
 
             window.draw_rectangle (fill_gc, True, x, y, w, h)
@@ -585,21 +609,22 @@ class Editor (gtk.TextView):
                 window.draw_line (stroke_gc, x, y, w, y)
                 window.draw_line (stroke_gc, x, y + h - 1, w, y + h - 1)
 
-        return gtk.TextView.do_expose_event (self, event)
+        return Gtk.TextView.do_expose_event (self, event)
 
     # button pressed on numbering pane -- move cursor to that line
     # for two clicks, set break point
     # parent is a hook to be able to access Interface
     def do_button_press_event (self, event):
-        gtk.TextView.do_button_press_event (self, event)
+        Gtk.TextView.do_button_press_event (self, event)
+        '''
         parent = self.main_parent
-        if event.window == self.get_window (gtk.TEXT_WINDOW_LEFT):
-            x, y = self.window_to_buffer_coords (gtk.TEXT_WINDOW_LEFT,
+        if event.window == self.get_window (Gtk.TextWindowType.LEFT):
+            x, y = self.window_to_buffer_coords (Gtk.TextWindowType.LEFT,
                                                  int (event.x), int (event.y))
             it = self.get_iter_at_location (x, y)
             self.get_buffer().place_cursor (it)
 
-            if event.type == gtk.gdk._2BUTTON_PRESS and self.mode.mode == Editor.Mode.RUN:
+            if event.type == Gdk.2BUTTON_PRESS and self.mode.mode == Editor.Mode.RUN:
                 line = it.get_line()
                 vpu = parent.vpu.vpu
 
@@ -632,6 +657,7 @@ class Editor (gtk.TextView):
                                                   "red")
                         else:
                             self.breakpoints.append (line)
+        '''
 
     def reload_breakpoints (self, vpu):
         for i in self.breakpoints:
@@ -645,13 +671,13 @@ class Editor (gtk.TextView):
         if digits != self.margin_digits:
             self.margin_digits = digits
             margin = (self.digit_width * digits) + 4
-            self.set_border_window_size (gtk.TEXT_WINDOW_LEFT, margin)
+            self.set_border_window_size (Gtk.TextWindowType.LEFT, margin)
 
     # Printing support
     def print_text (self, parent_window, title):
         print_data = self.PrintData()
         print_data.header_title = title
-        print_op = gtk.PrintOperation()
+        print_op = Gtk.PrintOperation()
 
         if self.settings != None:
             print_op.set_print_settings (self.settings)
@@ -660,11 +686,11 @@ class Editor (gtk.TextView):
         print_op.connect ("draw-page", self.print_page_cb, print_data)
 
         try:
-            res = print_op.run (gtk.PRINT_OPERATION_ACTION_PRINT_DIALOG, parent_window)
-        except gobject.GError, ex:
-            show_error ("While printing:\n%s" % str (ex))
+            res = print_op.run (Gtk.PRINT_OPERATION_ACTION_PRINT_DIALOG, parent_window)
+        except GObject.GError as ex:
+            show_error ("While printing:\n%s" % str(ex))
         else:
-            if res == gtk.PRINT_OPERATION_RESULT_APPLY:
+            if res == Gtk.PRINT_OPERATION_RESULT_APPLY:
                 self.settings = print_op.get_print_settings()
 
     class PrintData:
@@ -678,8 +704,8 @@ class Editor (gtk.TextView):
         width = context.get_width()
         height = context.get_height()
         print_data.layout = context.create_pango_layout()
-        print_data.layout.set_font_description (pango.FontDescription ("Monospace 12"))
-        print_data.layout.set_width (int (width * pango.SCALE))
+        print_data.layout.set_font_description (Pango.FontDescription ("Monospace 12"))
+        print_data.layout.set_width (int (width * Pango.SCALE))
         # create a layout based on the text with applied tags for printing
         it = self.get_buffer().get_start_iter()
         text = ""
@@ -705,8 +731,8 @@ class Editor (gtk.TextView):
         print_data.layout.set_markup (text)
 
         print_data.header_layout = context.create_pango_layout()
-        print_data.header_layout.set_font_description (pango.FontDescription ("Sans 12"))
-        print_data.header_layout.set_width (int (width * pango.SCALE))
+        print_data.header_layout.set_font_description (Pango.FontDescription ("Sans 12"))
+        print_data.header_layout.set_width (int (width * Pango.SCALE))
         print_data.header_layout.set_text ("title")
         header_height = print_data.header_layout.get_extents()[1][3] / 1024.0
         print_data.header_height = header_height + 10
@@ -778,11 +804,11 @@ class Editor (gtk.TextView):
             if not (i < end and iter.next_line()):
                 break
 
-gobject.type_register (Editor)
+GObject.type_register (Editor)
 
 # The setup dialog
 def read_config():
-    config = ConfigParser.ConfigParser ()
+    config = ConfigParser.ConfigParser()
     config.read (APOO_CONFIG_FILE)
 
     for i in preferences.keys():
@@ -794,7 +820,7 @@ def read_config():
         default_dir = config.get ("session", "default-dir")
 
 def write_config():
-    config = ConfigParser.ConfigParser ()
+    config = ConfigParser.ConfigParser()
 
     config.add_section ("preferences")
     for i in preferences.keys():
@@ -808,7 +834,7 @@ def write_config():
     config.write (file)
     file.close()
 
-# set as gtk.Entry "changed" callback to accept only integers
+# set as Gtk.Entry "changed" callback to accept only integers
 def numeric_entry_changed_cb (entry):
     text = entry.get_text()
     if text == "" or text == "-": return
@@ -816,11 +842,11 @@ def numeric_entry_changed_cb (entry):
     except ValueError:
         entry.set_text ("")
         entry.error_bell()
-        entry.modify_base (gtk.STATE_NORMAL, gtk.gdk.Color (0xffff, 0, 0))
+        entry.modify_base (Gtk.STATE_NORMAL, Gtk.gdk.Color (0xffff, 0, 0))
         def _restore (entry):
-            entry.modify_base (gtk.STATE_NORMAL, None)
+            entry.modify_base (Gtk.STATE_NORMAL, None)
             return False
-        gobject.timeout_add (50, _restore, entry)
+        GObject.timeout_add (50, _restore, entry)
 
 def entry_get_text_as_int (entry):
     text = entry.get_text()
@@ -844,7 +870,7 @@ class PreferencesDialog:
         builder.connect_signals (self)
 
         self.window = builder.get_object ("dialog")
-        windows = gtk.window_list_toplevels()
+        windows = Gtk.window_list_toplevels()
         self.window.set_transient_for (windows[0])
 
     def show (self):
@@ -855,7 +881,7 @@ class PreferencesDialog:
         for i in preferences.keys():
             widget = self.preferences_widgets[i]
             value = preferences[i]
-            if isinstance (widget, gtk.ToggleButton):
+            if isinstance (widget, Gtk.ToggleButton):
                 widget.set_active (bool (value))
             else:
                 widget.set_text (str (value))
@@ -865,7 +891,7 @@ class PreferencesDialog:
         for i in preferences.keys():
             widget = self.preferences_widgets[i]
             value = preferences[i]
-            if isinstance (widget, gtk.ToggleButton):
+            if isinstance (widget, Gtk.ToggleButton):
                 preferences[i] = int (widget.get_active())
             else:
                 preferences[i] = entry_get_text_as_int (widget)
@@ -906,7 +932,7 @@ def show_preferences():
     preferences_dialog.show()
 
 ## The table stack pointer renderer
-class CellRendererStackPointer (gtk.GenericCellRenderer):
+class CellRendererStackPointer (Gtk.CellRenderer):
     ARROW_WIDTH = ARROW_HEIGHT = 8
     # pointer enum
     POINTER_NONE   = 0
@@ -914,13 +940,13 @@ class CellRendererStackPointer (gtk.GenericCellRenderer):
     POINTER_MIDDLE = 2
 
     __gproperties__ = {
-        'pointer': (gobject.TYPE_INT, 'pointer property',
+        'pointer': (GObject.TYPE_INT, 'pointer property',
                      'Pointer relatively to the data being pointed to.',
-                     0, 4, POINTER_NONE, gobject.PARAM_READWRITE),
+                     0, 4, POINTER_NONE, GObject.PARAM_READWRITE),
     }
 
     def __init__(self):
-        self.__gobject_init__()
+        Gtk.CellRenderer.__init__(self)
         self.pointer = self.POINTER_NONE
 
     def do_get_property(self, pspec):
@@ -944,8 +970,8 @@ class CellRendererStackPointer (gtk.GenericCellRenderer):
         bg_gc.set_rgb_fg_color (get_tone_color (widget.style, 255))
         fg_gc = window.new_gc()
         fg_gc.set_rgb_fg_color (get_tone_color (widget.style, 140))
-        fg_gc.set_line_attributes (2, gtk.gdk.LINE_SOLID, gtk.gdk.CAP_ROUND,
-                                   gtk.gdk.JOIN_MITER)
+        fg_gc.set_line_attributes (2, Gtk.gdk.LINE_SOLID, Gtk.gdk.CAP_ROUND,
+                                   Gtk.gdk.JOIN_MITER)
 
         # pointer drawing
         x = cell_area.x
@@ -971,38 +997,57 @@ class CellRendererStackPointer (gtk.GenericCellRenderer):
 ## VPU Model
 
 class VpuModel:
-    class ListModel (gtk.GenericTreeModel):
+    class ListModel (GObject.Object, Gtk.TreeModel):
         def __init__ (self, list):
-            gtk.GenericTreeModel.__init__ (self)
+            GObject.Object.__init__(self)
             self.list = list
-        def on_get_flags (self):
-            return gtk.TREE_MODEL_ITERS_PERSIST|gtk.TREE_MODEL_LIST_ONLY    
-        def on_get_iter (self, path):
+
+        def do_get_flags (self):
+            return Gtk.TreeModelFlags.ITERS_PERSIST | Gtk.TreeModelFlags.LIST_ONLY
+
+        def do_get_iter (self, path):
             index = path[0]
             if index < len (self.list):
-                return index
-            return None
-        def on_get_path (self, index):
-            return (index,)
-        def on_iter_next (self, index):
-            if index+1 < len (self.list):
-                return index+1
+                iter_ = Gtk.TreeIter()
+                iter_.user_data = index
+                return (True, iter_)
+            return (False, None)
+
+        def do_get_path (self, iter_):
+            if iter_.user_data is not None:
+                return Gtk.TreePath((iter_.user_data,))
             return None
 
-        def on_iter_has_child (self, iter):
+        def do_iter_next (self, iter_):
+            if iter_.user_data+1 < len (self.list):
+                iter_.user_data += 1
+                return (True, iter_)
+            return (False, None)
+
+        def do_iter_has_child (self, iter):
             return False
-        def on_iter_parent(self, child):
+
+        def do_iter_parent(self, child):
             return None
-        def on_iter_n_children (self, iter):
+
+        def do_iter_n_children (self, iter):
             if iter == None:
                 len (self.list)
             return 0
-        def on_iter_nth_child (self, parent, n):
+
+        def do_iter_nth_child (self, parent, n):
             if n < len (self.list):
-                return [n]
-            return None
-        def on_iter_children (self, parent):
+                iter_ = Gtk.TreeIter()
+                iter_.user_data = n
+                return (True, iter_)
+            return (False, None)
+
+        def do_iter_children (self, parent):
             return self.on_iter_nth_child (parent, 0)
+
+        def do_get_value(self, iter_, column):
+            return self.get_value(iter_.user_data, column)
+
 
     class RamModel (ListModel):
         def __init__ (self, vpu):
@@ -1018,20 +1063,21 @@ class VpuModel:
         BACKGROUND_COLOR_COL = 6
         REGS_POINTER_COL = 7
         REGS_POINTER_TEXT_COL = 8
-        def on_get_n_columns (self): return 9
 
-        def on_get_column_type (self, col):
+        def do_get_n_columns (self): return 9
+
+        def do_get_column_type (self, col):
             if col == self.INDEX_COL: return str
             elif col == self.LABEL_COL: return str
             elif col == self.VALUE_COL: return str
             elif col == self.INDEX_COLOR_COL: return str
             elif col == self.LABEL_COLOR_COL: return str
             elif col == self.VALUE_COLOR_COL: return str
-            elif col == self.BACKGROUND_COLOR_COL: return gtk.gdk.Color
+            elif col == self.BACKGROUND_COLOR_COL: return Gdk.RGBA
             elif col == self.REGS_POINTER_COL: return int
             elif col == self.REGS_POINTER_TEXT_COL: return str
 
-        def on_get_value (self, index, col):
+        def get_value (self, index, col):
             if col == self.INDEX_COL:
                 return str (index)
             elif col == self.LABEL_COL:
@@ -1113,9 +1159,10 @@ class VpuModel:
         INDEX_COL = 0
         VALUE_COL = 1
         COLOR_COL = 2
-        def on_get_n_columns (self): return 3
 
-        def on_get_column_type (self, col):
+        def do_get_n_columns (self): return 3
+
+        def do_get_column_type (self, col):
             if col == self.INDEX_COL:
                 return str
             elif col == self.VALUE_COL:
@@ -1123,7 +1170,7 @@ class VpuModel:
             elif col == self.COLOR_COL:
                 return str
 
-        def on_get_value (self, index, col):
+        def get_value (self, index, col):
             if col == self.INDEX_COL:
                 s = "R%d" % index
                 if self.vpu.nreg >= 2:
@@ -1146,7 +1193,7 @@ class VpuModel:
             for i in self.vpu.last_reg_changed:
                 changed[i] = True
             for i in changed:
-                path = (i, )
+                path = Gtk.TreePath.new_from_indices([i])
                 iter = self.get_iter (path)
                 self.row_changed (path, iter)
 
@@ -1201,7 +1248,7 @@ class VpuModel:
         self.reg_model = VpuModel.RegModel (self.vpu)
         self.listener.set_ram_model (self.ram_model)
         self.listener.set_reg_model (self.reg_model)
-        self.output_buffer = gtk.TextBuffer()
+        self.output_buffer = Gtk.TextBuffer()
         self.listener.set_output_buffer (self.output_buffer)
         self.visible_changes = False
 
@@ -1317,25 +1364,26 @@ class VpuModel:
         buffer.insert (buffer.get_end_iter(), "%s" % value)
 
     def input_inst (self):
-        dialog = gtk.Dialog ("Insert Input", self.listener.get_toplevel(),
-                             gtk.DIALOG_MODAL | gtk.DIALOG_DESTROY_WITH_PARENT,
-                             (gtk.STOCK_OK, gtk.RESPONSE_ACCEPT))
+        dialog = Gtk.Dialog.new_with_buttons ("Insert Input",
+            self.listener.get_toplevel(),
+                             Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                             (Gtk.STOCK_OK, Gtk.ResponseType.ACCEPT))
         dialog.set_has_separator (False)
-        dialog.set_default_response (gtk.RESPONSE_ACCEPT)
+        dialog.set_default_response (Gtk.ResponseType.ACCEPT)
 
-        label = gtk.Label ("Input:")
-        entry = gtk.Entry()
+        label = Gtk.Label ("Input:")
+        entry = Gtk.Entry()
         entry.connect ("changed", numeric_entry_changed_cb)
         entry.set_activates_default (True)
 
-        box = gtk.HBox (False, 6)
+        box = Gtk.HBox (False, 6)
         box.set_border_width (6)
-        box.pack_start (label, expand = False)
-        box.pack_start (entry, expand = True)
+        box.pack_start (label, False, True, 0)
+        box.pack_start (entry, True, True, 0)
         box.show_all()
-        dialog.vbox.pack_start (box)
+        dialog.vbox.pack_start (box, True, True, 0)
 
-        while dialog.run() != gtk.RESPONSE_ACCEPT:
+        while dialog.run() != Gtk.ResponseType.ACCEPT:
             pass  # force user to accept
 
         value = entry_get_text_as_int (entry)
@@ -1344,9 +1392,9 @@ class VpuModel:
 
 ## The view
 
-class Interface (gtk.EventBox, VpuModel.Listener):
+class Interface (Gtk.EventBox, VpuModel.Listener):
     def __init__ (self, filename):
-        gtk.EventBox.__init__ (self)
+        Gtk.EventBox.__init__ (self)
         self.vpu = VpuModel (self)
         self.main_parent = None
 
@@ -1366,9 +1414,9 @@ class Interface (gtk.EventBox, VpuModel.Listener):
         self.clear_button = builder.get_object ("clear_button")
 
         self.step_value = 1
-        self.step_popup = gtk.Menu()
+        self.step_popup = Gtk.Menu()
         for i in xrange (1,21):
-            item = gtk.MenuItem (str (i))
+            item = Gtk.MenuItem (str (i))
             item.show()
             item.connect ("activate", self.on_step_popup_activate, i)
             self.step_popup.append (item)
@@ -1384,17 +1432,19 @@ class Interface (gtk.EventBox, VpuModel.Listener):
 
         self.counter = builder.get_object ("counter_entry")
         self.timer = builder.get_object ("timer_entry")
-        self.counter.modify_text (gtk.STATE_NORMAL, gtk.gdk.Color (0, 0, 0xffff))
+        '''
+        self.counter.modify_text (Gtk.STATE_NORMAL, Gtk.gdk.Color (0, 0, 0xffff))
+        '''
 
         self.output = builder.get_object ("output_view")
         set_monospace_font (self.output)
         self.registers = builder.get_object ("registers_view")
-        self.registers.get_selection().set_mode (gtk.SELECTION_NONE)
+        self.registers.get_selection().set_mode(Gtk.SelectionMode.NONE)
         self.memory = []
         for i in [1,2]:
             widget = builder.get_object ("memory_view" + str (i))
             self.memory.append (widget)
-            widget.get_selection().set_mode (gtk.SELECTION_NONE)
+            widget.get_selection().set_mode (Gtk.SelectionMode.NONE)
         self.memory_label_column2 = builder.get_object ("memory_label_column2")
         self.memory_ptr_columns = []
         for i in [1,2]:
@@ -1408,24 +1458,26 @@ class Interface (gtk.EventBox, VpuModel.Listener):
             column.set_attributes (cell,
                 pointer = VpuModel.RamModel.REGS_POINTER_COL,
                 cell_background_gdk = VpuModel.RamModel.BACKGROUND_COLOR_COL)
-            cell = gtk.CellRendererText()
+            cell = Gtk.CellRendererText()
             column.pack_start (cell, True)
             column.set_attributes (cell,
                 text = VpuModel.RamModel.REGS_POINTER_TEXT_COL,
                 cell_background_gdk = VpuModel.RamModel.BACKGROUND_COLOR_COL)
 
-            layout = pango.Layout (widget.get_pango_context())
-            layout.set_text ("rs")
+            layout = Pango.Layout (widget.get_pango_context())
+            layout.set_text ("rs", -1)
             w2, _ = layout.get_pixel_size()
             column.set_fixed_width (w1 + w2 + 8)
 
         builder.get_object ("memory_label_column2")
         self.message = builder.get_object ("info_label")
+        '''
         # glade 3.6.7 didn't handle PangoScale well, so setting these manually
-        attrbs = pango.AttrList()
-        attrbs.insert (pango.AttrWeight (pango.WEIGHT_BOLD, 0, -1))
-        attrbs.insert (pango.AttrScale (pango.SCALE_X_LARGE, 0, -1))
+        attrbs = Pango.AttrList()
+        attrbs.insert (Pango.Attribute.weight_new (Pango.Weight.BOLD, 0, -1))
+        attrbs.insert (Pango.AttrScale (Pango.SCALE_X_LARGE, 0, -1))
         self.message.set_attributes (attrbs)
+        '''
 
         top = builder.get_object ("top")
         top.reparent (self)
@@ -1444,12 +1496,12 @@ class Interface (gtk.EventBox, VpuModel.Listener):
             view2.show()
             paned = view2.get_parent()
             if preferences["mirror_memory_hor"]:
-                paned.set_orientation (gtk.ORIENTATION_HORIZONTAL)
+                paned.set_orientation (Gtk.ORIENTATION_HORIZONTAL)
                 self.memory_label_column2.set_visible (False)
                 self.memory_ptr_columns[0].set_visible (False)
                 self.memory[1].set_headers_visible (True)
             else:
-                paned.set_orientation (gtk.ORIENTATION_VERTICAL)
+                paned.set_orientation (Gtk.ORIENTATION_VERTICAL)
                 self.memory_label_column2.set_visible (True)
                 self.memory[1].set_headers_visible (False)
         else:
@@ -1459,19 +1511,19 @@ class Interface (gtk.EventBox, VpuModel.Listener):
         scroll.get_child().grab_focus()
 
     def create_informative (self, title):
-        entry = gtk.Entry()
+        entry = Gtk.Entry()
         entry.set_editable (False)  # let's make people see the entry is un-editable...
-        entry.modify_base (gtk.STATE_NORMAL, entry.style.base [gtk.STATE_INSENSITIVE]);
+        entry.modify_base (Gtk.STATE_NORMAL, entry.style.base [Gtk.STATE_INSENSITIVE]);
         entry.set_size_request (40, -1)
 
-        label = gtk.Label ("<span foreground=\"red\"><b>" + title + ":</b></span>")
+        label = Gtk.Label ("<span foreground=\"red\"><b>" + title + ":</b></span>")
         label.set_use_markup (True)
         label.set_use_underline (True)
         label.set_mnemonic_widget (entry)
 
-        box = gtk.HBox (False, 4)
-        box.pack_start (label, expand = False)
-        box.pack_start (entry, expand = False)
+        box = Gtk.HBox (False, 4)
+        box.pack_start (label, False, True, 0)
+        box.pack_start (entry, False, True, 0)
         return (entry, box)
 
     ## Interface methods
@@ -1538,7 +1590,7 @@ class Interface (gtk.EventBox, VpuModel.Listener):
 
     def set_output_buffer (self, buffer):
         if buffer == None:
-            buffer = gtk.TextBuffer()
+            buffer = Gtk.TextBuffer()
         self.output.set_buffer (buffer)
 
     def set_program_counter (self, value):
@@ -1556,9 +1608,9 @@ class Interface (gtk.EventBox, VpuModel.Listener):
         self.message.set_text (text)
         message_box = self.message.get_parent()
         message_frame = message_box.get_parent()
-        _color = gtk.gdk.color_parse (color)
-        message_box.modify_bg (gtk.STATE_NORMAL, _color)
-        message_frame.modify_bg (gtk.STATE_NORMAL, _color)
+        _color = Gdk.color_parse (color)
+        message_box.modify_bg (Gtk.StateType.NORMAL, _color)
+        message_frame.modify_bg (Gtk.StateType.NORMAL, _color)
         if status != None:
             self.vpu_status.set_text ("Status: " + status)
         self.editor.mode.set_current_line_color (color)
@@ -1597,6 +1649,7 @@ class Interface (gtk.EventBox, VpuModel.Listener):
         self.vpu.BreakP = []
         self.set_message ("All break points removed", None, "white")
 
+    '''
     def on_lists_box_size_request (self, box, req):
         req.width = 200
 
@@ -1610,9 +1663,10 @@ class Interface (gtk.EventBox, VpuModel.Listener):
         x = alloc.x
         for i in xrange (children_nb):
             width = int (alloc_width * sizes[i])
-            a = gtk.gdk.Rectangle (x, alloc.y, width, alloc.height)
+            a = Gtk.gdk.Rectangle (x, alloc.y, width, alloc.height)
             children[i].size_allocate (a)
             x += width + box.get_spacing()
+    '''
 
     def cursor_moved_cb (self, buffer, pos_ptr):
         if self.get_editable():
@@ -1636,9 +1690,10 @@ class Interface (gtk.EventBox, VpuModel.Listener):
         else:
             if not self.editor.get_buffer().read (filename):
                 msg = "Couldn't read from file: " + filename
-                dialog = gtk.MessageDialog (self.get_toplevel(),
-                    gtk.DIALOG_MODAL|gtk.DIALOG_DESTROY_WITH_PARENT, gtk.MESSAGE_ERROR,
-                    gtk.BUTTONS_OK, msg)
+                dialog = Gtk.MessageDialog (self.get_toplevel(),
+                    Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                    Gtk.MESSAGE_ERROR,
+                    Gtk.ButtonsType.OK, msg)
                 dialog.run()
                 dialog.destroy()
                 filename = None
@@ -1651,9 +1706,10 @@ class Interface (gtk.EventBox, VpuModel.Listener):
             self.filename = filename
         else:
             msg = "Couldn't save to file: " + filename
-            dialog = gtk.MessageDialog (self.get_toplevel(),
-                gtk.DIALOG_MODAL|gtk.DIALOG_DESTROY_WITH_PARENT, gtk.MESSAGE_ERROR,
-                gtk.BUTTONS_OK, msg)
+            dialog = Gtk.MessageDialog (self.get_toplevel(),
+                Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+                Gtk.MESSAGE_ERROR,
+                Gtk.ButtonsType.OK, msg)
             dialog.format_secondary_text ("Check file permissions")
             dialog.run()
             dialog.destroy()
@@ -1676,16 +1732,16 @@ class Interface (gtk.EventBox, VpuModel.Listener):
 
     def edit_cut (self):
         buffer = self.editor.get_buffer()
-        clipboard = gtk.clipboard_get()
+        clipboard = Gtk.clipboard_get()
         buffer.cut_clipboard (clipboard, self.editor.get_editable())
     def edit_copy (self):
         buffer = self.editor.get_buffer()
-        clipboard = gtk.clipboard_get()
+        clipboard = Gtk.clipboard_get()
         buffer.copy_clipboard (clipboard)
     def edit_paste (self):
         if not self.editor.get_editable(): return
         buffer = self.editor.get_buffer()
-        clipboard = gtk.clipboard_get()
+        clipboard = Gtk.clipboard_get()
         buffer.paste_clipboard (clipboard, None, True)
 
     def edit_kill_line (self):
@@ -1697,7 +1753,7 @@ class Interface (gtk.EventBox, VpuModel.Listener):
         end_it = start_it.copy()
         end_it.forward_line()
 
-        clipboard = gtk.clipboard_get()
+        clipboard = Gtk.clipboard_get()
         clipboard.set_text (buffer.get_text (start_it, end_it, False))
         buffer.delete (start_it, end_it)
 
@@ -1763,13 +1819,12 @@ class Window:
         builder = builder_from_file ("ui/window.ui")
         if builder == None: return
 
-        manager = gtk.recent_manager_get_default()
-        recents_menu = gtk.RecentChooserMenu (manager)
+        recents_menu = Gtk.RecentChooserMenu()
         recents_menu.set_show_numbers (True)
         recents_menu.set_local_only (True)
-        recents_menu.set_sort_type (gtk.RECENT_SORT_MRU)
+        recents_menu.set_sort_type (Gtk.RecentSortType.MRU)
         recents_menu.set_limit (10)
-        filter = gtk.RecentFilter()
+        filter = Gtk.RecentFilter()
         filter.add_pattern ("*.apoo")
         recents_menu.set_filter (filter)
         recents_menu.connect ("item-activated", self.on_file_open_recent_item_activate)
@@ -1789,6 +1844,7 @@ class Window:
         else:
             self.window.set_title ("Apoo Workbench")
         self.window.show()
+        self.window.set_default_icon_name ("apoo")
 
         self.notebook = builder.get_object ("notebook")
         self.notebook_popup = None
@@ -1811,15 +1867,15 @@ class Window:
         return self.notebook.get_nth_page (self.notebook.get_current_page())
 
     def add_child (self, child):
-        label = gtk.HBox (False, 2)
+        label = Gtk.HBox (False, 2)
         # close button based on GEdit -- make it small
-        close_image = gtk.Image()
-        close_image.set_from_stock (gtk.STOCK_CLOSE, gtk.ICON_SIZE_MENU)
-        close_button = gtk.Button()
+        close_image = Gtk.Image()
+        close_image.set_from_stock (Gtk.STOCK_CLOSE, Gtk.IconSize.MENU)
+        close_button = Gtk.Button()
         close_button.add (close_image)
-        close_button.set_relief (gtk.RELIEF_NONE)
+        close_button.set_relief (Gtk.ReliefStyle.NONE)
         close_button.set_focus_on_click (False)
-        gtk.rc_parse_string (
+        Gtk.rc_parse_string (
             "style \"zero-thickness\"\n" +
             "{\n" +
             "   xthickness = 0\n" +
@@ -1828,17 +1884,16 @@ class Window:
             "widget \"*.pagebutton\" style \"zero-thickness\""
         )
         close_button.set_name ("pagebutton")
-        if gtk.pygtk_version >= (2,12,0):
-            close_button.set_tooltip_text ("Close document")
+        close_button.set_tooltip_text ("Close document")
         close_button.connect ("clicked", self.notebook_page_close_cb, child)
         close_button.connect ("style-set", self.notebook_close_button_style_set_cb)
 
-        icon = gtk.image_new_from_stock (gtk.STOCK_FILE, gtk.ICON_SIZE_MENU)
-        label.label = gtk.Label ("")
+        icon = Gtk.Image.new_from_stock (Gtk.STOCK_FILE, Gtk.IconSize.MENU)
+        label.label = Gtk.Label ("")
 
-        label.pack_start (icon, False)
-        label.pack_start (label.label, True)
-        label.pack_start (close_button, False)
+        label.pack_start (icon, False, True, 0)
+        label.pack_start (label.label, True, True, 0)
+        label.pack_start (close_button, False, True, 0)
         label.show_all()
 
         page_num = self.notebook.append_page (child, label)
@@ -1870,21 +1925,21 @@ class Window:
             ask = True
         if ask:
             global default_dir
-            dialog = gtk.FileChooserDialog ("Save File", self.window, gtk.FILE_CHOOSER_ACTION_SAVE,
-                                            buttons = (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-                                                       gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
+            dialog = Gtk.FileChooserDialog ("Save File", self.window, Gtk.FILE_CHOOSER_ACTION_SAVE,
+                                            buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                                                       Gtk.STOCK_SAVE, Gtk.ResponseType.ACCEPT))
             if default_dir != None:
                 dialog.set_current_folder (default_dir)
-            filter = gtk.FileFilter()
+            filter = Gtk.FileFilter()
             filter.set_name ("Apoo programs")
             filter.add_pattern ("*.apoo")
             dialog.set_filter (filter)
             dialog.set_local_only (True)
             dialog.set_do_overwrite_confirmation (True)
-            dialog.set_default_response (gtk.RESPONSE_ACCEPT)
+            dialog.set_default_response (Gtk.ResponseType.ACCEPT)
 
             ret = dialog.run()
-            if ret == gtk.RESPONSE_ACCEPT:
+            if ret == Gtk.ResponseType.ACCEPT:
                 default_dir = dialog.get_current_folder()
                 filename = dialog.get_filename()
                 if not filename.endswith (".apoo"):
@@ -1901,7 +1956,7 @@ class Window:
         return True
 
     def file_accessed (self, filename):
-        manager = gtk.recent_manager_get_default()
+        manager = Gtk.recent_manager_get_default()
         data = { 'mime_type': "text/plain", 'app_name': "apoo", 'app_exec': "apoo",
                  'display_name': os.path.basename (filename), 'groups': ['apoo'],
                  'is_private': bool (False), 'description': "Apoo program" }
@@ -1935,7 +1990,7 @@ class Window:
             self.close_child (child)
 
     def notebook_close_button_style_set_cb (self, button, prev_style):
-        w, h = gtk.icon_size_lookup_for_settings (button.get_settings(), gtk.ICON_SIZE_MENU)
+        _, w, h = Gtk.icon_size_lookup(Gtk.IconSize.MENU)
         button.set_size_request (w+2, h+2)
 
     def notebook_get_page_at (self, x, y):  # utility for press button
@@ -1954,12 +2009,12 @@ class Window:
         return (-1, None)
 
     def on_notebook_button_press_event (self, notebook, event):
-        if event.button == 3 and event.type == gtk.gdk.BUTTON_PRESS:
+        if event.button == 3 and event.type == Gtk.gdk.BUTTON_PRESS:
             if self.notebook_popup == None:
-                item = gtk.MenuItem ("Move to New Window")
+                item = Gtk.MenuItem ("Move to New Window")
                 item.connect ("activate", self.notebook_detach_child_cb)
                 item.show()
-                self.notebook_popup = gtk.Menu()
+                self.notebook_popup = Gtk.Menu()
                 self.notebook_popup.append (item)
                 self.notebook_popup.attach_to_widget (self.notebook, None)
 
@@ -1978,21 +2033,21 @@ class Window:
         self.open_file (None)
 
     def on_file_open_activate (self, item):
-        dialog = gtk.FileChooserDialog ("Open File", self.window, gtk.FILE_CHOOSER_ACTION_OPEN,
-            buttons = (gtk.STOCK_CANCEL, gtk.RESPONSE_REJECT, gtk.STOCK_OPEN, gtk.RESPONSE_ACCEPT))
+        dialog = Gtk.FileChooserDialog ("Open File", self.window, Gtk.FILE_CHOOSER_ACTION_OPEN,
+            buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT, Gtk.STOCK_OPEN, Gtk.ResponseType.ACCEPT))
         global default_dir
         if default_dir != None:
             dialog.set_current_folder (default_dir)
-        filter = gtk.FileFilter()
+        filter = Gtk.FileFilter()
         filter.set_name ("Apoo programs")
         filter.add_pattern ("*.apoo")
         dialog.set_filter (filter)
         dialog.set_local_only (True)
         dialog.set_select_multiple (True)
         dialog.add_shortcut_folder (EXAMPLES_PATH)
-        dialog.set_default_response (gtk.RESPONSE_ACCEPT)
+        dialog.set_default_response (Gtk.ResponseType.ACCEPT)
 
-        if dialog.run() == gtk.RESPONSE_ACCEPT:
+        if dialog.run() == Gtk.ResponseType.ACCEPT:
             default_dir = dialog.get_current_folder()
             for i in dialog.get_filenames():
                 self.open_file (i)
@@ -2059,28 +2114,28 @@ class Window:
         show_preferences()
 
     def show_file_text_dialog (self, title, path, filename):
-        dialog = gtk.Dialog (title, self.window,
-                             buttons = (gtk.STOCK_CLOSE, gtk.RESPONSE_CLOSE))
-        dialog.set_default_response (gtk.RESPONSE_CLOSE)
+        dialog = Gtk.Dialog (title, self.window,
+                             buttons = (Gtk.STOCK_CLOSE, Gtk.ResponseType.CLOSE))
+        dialog.set_default_response (Gtk.ResponseType.CLOSE)
         dialog.connect ("response", self.close_file_text_dialog_cb)
         dialog.set_default_size (-1, 450)
 
-        buffer = gtk.TextBuffer()
+        buffer = Gtk.TextBuffer()
         file = open (path+filename + ".txt", 'r')
         buffer.set_text (file.read())
         file.close()
 
-        view = gtk.TextView (buffer)
+        view = Gtk.TextView.new_with_buffer (buffer)
         view.set_editable (False)
         view.set_cursor_visible (False)
         set_monospace_font (view)
 
-        window = gtk.ScrolledWindow()
-        window.set_policy (gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
-        window.set_shadow_type (gtk.SHADOW_IN)
+        window = Gtk.ScrolledWindow()
+        window.set_policy (Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        window.set_shadow_type (Gtk.ShadowType.IN)
         window.add (view)
 
-        dialog.vbox.pack_start (window, True)
+        dialog.vbox.pack_start (window, True, True, 0)
         dialog.show_all()  # not run() because we don't want it modal
 
     def close_file_text_dialog_cb (self, dialog, response):
@@ -2095,7 +2150,7 @@ class Window:
         self.show_file_text_dialog("Help - Assembly", DOCS_PATH, DOC_ASSEMBLY)
 
     def on_help_about_activate (self, item):
-        dialog = gtk.AboutDialog()
+        dialog = Gtk.AboutDialog()
         dialog.set_transient_for (self.window)
         dialog.set_name ("Apoo")
         dialog.set_version (VERSION)
@@ -2113,13 +2168,14 @@ class Window:
         else:
             msg = "Document modified. "
         msg += "Save changes?"
-        dialog = gtk.MessageDialog (self.window, gtk.DIALOG_MODAL|gtk.DIALOG_DESTROY_WITH_PARENT,
-            gtk.MESSAGE_QUESTION, gtk.BUTTONS_NONE, msg)
-        dialog.add_button ("Don't Save", gtk.RESPONSE_REJECT)
-        dialog.add_button (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL)
-        dialog.add_button (gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT)
+        dialog = Gtk.MessageDialog (self.window,
+            Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+            Gtk.MessageType.QUESTION, Gtk.ButtonsType.NONE, msg)
+        dialog.add_button ("Don't Save", Gtk.ResponseType.REJECT)
+        dialog.add_button (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
+        dialog.add_button (Gtk.STOCK_SAVE, Gtk.ResponseType.ACCEPT)
         if content != None:
-            dialog.vbox.pack_start (content)
+            dialog.vbox.pack_start (content, True, True, 0)
             content.show_all()
         ret = dialog.run()
         dialog.destroy()
@@ -2129,13 +2185,13 @@ class Window:
         if not child.editor.get_buffer().get_modified():
             return True
         response = self.run_confirm_dialog (1, None)
-        if response == gtk.RESPONSE_CANCEL:
+        if response == Gtk.ResponseType.CANCEL:
             return False
-        if response == gtk.RESPONSE_ACCEPT:
+        if response == Gtk.ResponseType.ACCEPT:
             return self.save_file (False, child)
         return True
     def confirm_changes (self):
-        model = gtk.ListStore (bool, str, int)
+        model = Gtk.ListStore (bool, str, int)
         editors = self.notebook.get_children()
         modified = 0
         for i in xrange (len (editors)):
@@ -2149,27 +2205,27 @@ class Window:
         if modified == 0:
             return True
 
-        view = gtk.TreeView (model)
+        view = Gtk.TreeView (model)
         view.set_headers_visible (False)
-        view.get_selection().set_mode (gtk.SELECTION_NONE)
+        view.get_selection().set_mode (Gtk.SelectionMode.NONE)
         view.set_search_column (1)
 
-        renderer = gtk.CellRendererToggle()
+        renderer = Gtk.CellRendererToggle()
         renderer.connect ("toggled", self.confirm_filename_toggled_cb, model)
         view.connect ("row-activated", self.confirm_filename_activated_cb, model)
-        column = gtk.TreeViewColumn ("", renderer, active = 0)
+        column = Gtk.TreeViewColumn ("", renderer, active = 0)
         view.append_column (column)
-        column = gtk.TreeViewColumn ("Filename", gtk.CellRendererText(), text = 1)
+        column = Gtk.TreeViewColumn ("Filename", Gtk.CellRendererText(), text = 1)
         view.append_column (column)
 
-        scroll = gtk.ScrolledWindow()
-        scroll.set_policy (gtk.POLICY_NEVER, gtk.POLICY_AUTOMATIC)
-        scroll.set_shadow_type (gtk.SHADOW_OUT)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy (Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_shadow_type (Gtk.ShadowType.IN)
         scroll.set_size_request (-1, 80)
         scroll.add (view)
 
         response = self.run_confirm_dialog (modified, scroll)
-        if response == gtk.RESPONSE_ACCEPT:
+        if response == Gtk.ResponseType.ACCEPT:
             iter = model.get_iter_first()
             while iter != None:
                 value = model.get_value (iter, 0)
@@ -2179,7 +2235,7 @@ class Window:
                         return False
                 iter = model.iter_next (iter) 
             return True
-        return response == gtk.RESPONSE_REJECT
+        return response == Gtk.ResponseType.REJECT
     def confirm_filename_toggle (self, model, iter):
         value = model.get_value (iter, 0)
         model.set (iter, 0, not value)
@@ -2197,7 +2253,7 @@ class Window:
         global windows
         windows.remove (self)
         if len (windows) == 0:
-            gtk.main_quit()
+            Gtk.main_quit()
         return False
 
     def sync_preferences (self):
@@ -2257,7 +2313,6 @@ if __name__ == "__main__":
     DATA_PATH = os.path.dirname (argv[0]) + "/"
     if DATA_PATH == "/":
         DATA_PATH = "./"
-    gtk.window_set_default_icon_name ("apoo")
 
     if test_mode and len (filenames) == 0:
         print "Usage: " + argv[0] + " --tester filename"
@@ -2267,7 +2322,7 @@ if __name__ == "__main__":
     read_config()
 
     Window (filenames)
-    gtk.main()
+    Gtk.main()
 
     write_config()
 

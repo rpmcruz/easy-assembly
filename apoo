@@ -5,5 +5,3 @@ DIR=.
 
 /usr/bin/python $DIR/interface.py $*
 
-
-

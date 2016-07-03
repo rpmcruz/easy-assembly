@@ -402,7 +402,7 @@
             <property name="visible">True</property>
             <property name="can_focus">True</property>
             <property name="scrollable">True</property>
-            <property name="group_id">0</property>
+            <property name="group_name">common</property>
             <signal name="button_press_event" handler="on_notebook_button_press_event"/>
             <signal name="page_added" handler="on_notebook_page_added" after="yes"/>
             <signal name="page_removed" handler="on_notebook_switch_page" after="yes"/>

@@ -260,8 +260,6 @@
                 <property name="visible">True</property>
                 <property name="spacing">12</property>
                 <property name="homogeneous">True</property>
-                <signal name="size_request" handler="on_lists_box_size_request"/>
-                <signal name="size_allocate" handler="on_lists_box_size_allocate"/>
                 <child>
                   <object class="GtkVBox" id="vbox5">
                     <property name="visible">True</property>
