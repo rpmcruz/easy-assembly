@@ -1890,10 +1890,13 @@ class Window:
             ask = True
         if ask:
             global default_dir
-            dialog = Gtk.FileChooserDialog('Save File', self.window,
-                Gtk.FileChooserAction.SAVE,
-                (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                 Gtk.STOCK_SAVE, Gtk.ResponseType.ACCEPT))
+            dialog = Gtk.FileChooserDialog(
+                title='Save File',
+                action=Gtk.FileChooserAction.SAVE)
+            dialog.set_transient_for(self.window)
+            dialog.add_buttons(
+                Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                Gtk.STOCK_SAVE, Gtk.ResponseType.ACCEPT)
             if default_dir != None:
                 dialog.set_current_folder (default_dir)
             filter = Gtk.FileFilter()
@@ -1922,10 +1925,14 @@ class Window:
         return True
 
     def file_accessed (self, filename):
-        manager = Gtk.recent_manager_get_default()
-        data = { 'mime_type': "text/plain", 'app_name': "apoo", 'app_exec': "apoo",
-                 'display_name': os.path.basename (filename), 'groups': ['apoo'],
-                 'is_private': bool (False), 'description': "Apoo program" }
+        manager = Gtk.RecentManager.get_default()
+        data = Gtk.RecentData()
+        data.app_exec = 'apoo'
+        data.app_name = 'apoo'
+        data.description = 'Apoo program'
+        data.display_name = os.path.basename(filename)
+        data.is_private = False
+        data.mime_type = 'text/plain'
         uri = filename
         if filename[0] != '/':
             uri = os.path.join (os.getcwd(), filename)
@@ -1999,10 +2006,13 @@ class Window:
         self.open_file (None)
 
     def on_file_open_activate (self, item):
-        dialog = Gtk.FileChooserDialog.new('Open File', self.window,
-            Gtk.FileChooserAction.OPEN,
-            (Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
-             Gtk.STOCK_OPEN, Gtk.ResponseType.ACCEPT))
+        dialog = Gtk.FileChooserDialog(
+            title='Open File',
+            action=Gtk.FileChooserAction.OPEN)
+        dialog.set_transient_for(self.window)
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
+             Gtk.STOCK_OPEN, Gtk.ResponseType.ACCEPT)
         global default_dir
         if default_dir != None:
             dialog.set_current_folder (default_dir)
