@@ -3,5 +3,6 @@
 #change this line to current directory of Apoo files
 DIR=.
 
-/usr/bin/python $DIR/interface.py $*
+#/usr/bin/python $DIR/interface.py $*
+/usr/bin/python -W error $DIR/interface.py $*
 
