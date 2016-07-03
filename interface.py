@@ -122,10 +122,7 @@ def get_tone_color (style, tone):
     red   = int (red_ratio   * tone)
     green = int (green_ratio * tone)
     blue  = int (blue_ratio  * tone)
-    return get_color (red, green, blue)
-
-def get_color (red, green, blue):
-    return Gdk.RGBA (red << 8, green << 8, blue << 8, 0)
+    return Gdk.RGBA(red/255., green/255., blue/255.)
 
 ## Our own widgets
 
@@ -947,6 +944,7 @@ class CellRendererStackPointer (Gtk.CellRenderer):
             raise AttributeError, 'unknown property %s' % pspec.name
 
     def do_render (self, window, widget, bg_area, cell_area, expose_area, flags):
+        print 'render cell arrow !!'
         if self.pointer == self.POINTER_NONE:
             return
 
@@ -1088,11 +1086,11 @@ class VpuModel:
                 rs = self.vpu.reg [-1]
                 if index < rf or index > rs:
                     if index % 2 == 1:
-                        return get_color (242, 171, 171)
-                    return get_color (255, 180, 180)
+                        return Gdk.RGBA(0.95, 0.67, 0.67)
+                    return Gdk.RGBA(1, 0.7, 0.7)
                 if index % 2 == 1:
-                    return get_color (238, 238, 238)
-                return get_color (255, 255, 255)
+                    return Gdk.RGBA(0.93, 0.93, 0.93)
+                return Gdk.RGBA(1, 1, 1)
             elif col == self.REGS_POINTER_COL:
                 if len (self.vpu.reg) >= 2:
                     rf = self.vpu.reg [-2]
@@ -1439,12 +1437,12 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
             column.pack_start (cell, False)
             column.set_attributes (cell,
                 pointer = VpuModel.RamModel.REGS_POINTER_COL,
-                cell_background_gdk = VpuModel.RamModel.BACKGROUND_COLOR_COL)
+                cell_background_rgba=VpuModel.RamModel.BACKGROUND_COLOR_COL)
             cell = Gtk.CellRendererText()
             column.pack_start (cell, True)
             column.set_attributes (cell,
                 text = VpuModel.RamModel.REGS_POINTER_TEXT_COL,
-                cell_background_gdk = VpuModel.RamModel.BACKGROUND_COLOR_COL)
+                cell_background_rgba=VpuModel.RamModel.BACKGROUND_COLOR_COL)
 
             layout = Pango.Layout (widget.get_pango_context())
             layout.set_text ("rs", -1)
