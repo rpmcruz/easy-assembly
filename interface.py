@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 interface.py - a GTK+ frontend for the Apoo processor
-Copyright (C) 2006-2010 Ricardo Cruz <rpmcruz@alunos.dcc.fc.up.pt>
+Copyright (C) 2006-2016 Ricardo Cruz <ricardo.pdm.cruz@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -923,7 +923,7 @@ class CellRendererStackPointer (Gtk.CellRenderer):
     __gproperties__ = {
         'pointer': (GObject.TYPE_INT, 'pointer property',
                      'Pointer relatively to the data being pointed to.',
-                     0, 4, POINTER_NONE, GObject.PARAM_READWRITE),
+                     0, 4, POINTER_NONE, GObject.ParamFlags.READWRITE),
     }
 
     def __init__(self):
@@ -934,44 +934,32 @@ class CellRendererStackPointer (Gtk.CellRenderer):
         if pspec.name == "pointer":
             return self.pointer
         else:
-            raise AttributeError, 'unknown property %s' % pspec.name
+            raise AttributeError('unknown property %s' % pspec.name)
 
     def do_set_property (self, pspec, value):
         if pspec.name == "pointer":
             self.pointer = value
             self.notify ("pointer")
         else:
-            raise AttributeError, 'unknown property %s' % pspec.name
+            raise AttributeError('unknown property %s' % pspec.name)
 
-    def do_render (self, window, widget, bg_area, cell_area, expose_area, flags):
-        print 'render cell arrow !!'
-        if self.pointer == self.POINTER_NONE:
-            return
-
-        bg_gc = window.new_gc()
-        bg_gc.set_rgb_fg_color (get_tone_color (widget.style, 255))
-        fg_gc = window.new_gc()
-        fg_gc.set_rgb_fg_color (get_tone_color (widget.style, 140))
-        fg_gc.set_line_attributes (2, Gtk.gdk.LINE_SOLID, Gtk.gdk.CAP_ROUND,
-                                   Gtk.gdk.JOIN_MITER)
-
-        # pointer drawing
-        x = cell_area.x
-        y = bg_area.y
-        w = cell_area.width  # self.ARROW_WIDTH
-        h = bg_area.height
-        if self.pointer == self.POINTER_MIDDLE:
-            window.draw_line (fg_gc, x + w/2, y, x + w/2, y+h)
-
-        else:
-            x = cell_area.x
-            w = self.ARROW_WIDTH
-            y = cell_area.y + cell_area.height/2
-            h = self.ARROW_HEIGHT
-
-            points = [ (x, y), (x + w, y - h/2), (x + w, y + h/2) ]
-            window.draw_polygon (bg_gc, True, points)
-            window.draw_polygon (fg_gc, False, points)
+    def do_render (self, cr, widget, bg_area, cell_area, flags):
+        if self.pointer != self.POINTER_NONE:
+            print 'arrow cell - do render:', cell_area, self.pointer
+            cr.set_source_rgb(0, 1, 1);
+            if self.pointer == self.POINTER_MIDDLE:
+                cr.move_to(self.ARROW_WIDTH/2, 0);
+                cr.line_to(self.ARROW_WIDTH/2, self.ARROW_HEIGHT);
+                cr.stroke()
+            else:
+                cr.move_to(0, self.ARROW_HEIGHT/2);
+                cr.line_to(self.ARROW_WIDTH, 0);
+                cr.line_to(self.ARROW_WIDTH, self.ARROW_HEIGHT);
+                cr.fill()
+            cr.move_to(0, 0);
+            cr.line_to(100, 100);
+            cr.line_to(100, 0);
+            cr.fill()
 
     def do_get_size (self, widget, cell_area):
         return 0, 0, self.ARROW_WIDTH, self.ARROW_HEIGHT
@@ -1179,7 +1167,7 @@ class VpuModel:
                 iter = self.get_iter (path)
                 self.row_changed (path, iter)
 
-    class Listener:
+    class Listener(GObject.GObject):
         def set_ram_model (self, model): pass
         def set_reg_model (self, model): pass
         def set_ram_scroll (self, path): pass
@@ -1358,7 +1346,7 @@ class VpuModel:
         entry.connect ("changed", numeric_entry_changed_cb)
         entry.set_activates_default (True)
 
-        box = Gtk.HBox (False, 6)
+        box = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 6)
         box.set_border_width (6)
         box.pack_start (label, False, True, 0)
         box.pack_start (entry, True, True, 0)
@@ -1398,7 +1386,7 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
         self.step_value = 1
         self.step_popup = Gtk.Menu()
         for i in xrange (1,21):
-            item = Gtk.MenuItem (str (i))
+            item = Gtk.MenuItem.new_with_label(str(i))
             item.show()
             item.connect ("activate", self.on_step_popup_activate, i)
             self.step_popup.append (item)
@@ -1434,15 +1422,19 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
             view = self.memory[i-1]
             cell = CellRendererStackPointer()
             _, _, w1, _ = cell.do_get_size (view, None)
-            column.pack_start (cell, False)
+            print 'cell renderer arrow width:', w1
+            column.pack_start (cell, True)
             column.set_attributes (cell,
-                pointer = VpuModel.RamModel.REGS_POINTER_COL,
+                pointer=VpuModel.RamModel.REGS_POINTER_COL,
                 cell_background_rgba=VpuModel.RamModel.BACKGROUND_COLOR_COL)
+
+            '''
             cell = Gtk.CellRendererText()
             column.pack_start (cell, True)
             column.set_attributes (cell,
-                text = VpuModel.RamModel.REGS_POINTER_TEXT_COL,
+                text=VpuModel.RamModel.REGS_POINTER_TEXT_COL,
                 cell_background_rgba=VpuModel.RamModel.BACKGROUND_COLOR_COL)
+            '''
 
             layout = Pango.Layout (widget.get_pango_context())
             layout.set_text ("rs", -1)
@@ -1494,7 +1486,7 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
         label.set_use_underline (True)
         label.set_mnemonic_widget (entry)
 
-        box = Gtk.HBox (False, 4)
+        box = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 4)
         box.pack_start (label, False, True, 0)
         box.pack_start (entry, False, True, 0)
         return (entry, box)
@@ -1840,7 +1832,7 @@ class Window:
         return self.notebook.get_nth_page (self.notebook.get_current_page())
 
     def add_child (self, child):
-        label = Gtk.HBox (False, 2)
+        label = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 2)
         # close button based on GEdit -- make it small
         close_image = Gtk.Image()
         close_image.set_from_stock (Gtk.STOCK_CLOSE, Gtk.IconSize.MENU)
@@ -1862,7 +1854,7 @@ class Window:
         close_button.connect ("style-set", self.notebook_close_button_style_set_cb)
 
         icon = Gtk.Image.new_from_stock (Gtk.STOCK_FILE, Gtk.IconSize.MENU)
-        label.label = Gtk.Label ("")
+        label.label = Gtk.Label.new('')
 
         label.pack_start (icon, False, True, 0)
         label.pack_start (label.label, True, True, 0)
@@ -1898,9 +1890,10 @@ class Window:
             ask = True
         if ask:
             global default_dir
-            dialog = Gtk.FileChooserDialog ("Save File", self.window, Gtk.FILE_CHOOSER_ACTION_SAVE,
-                                            buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                                                       Gtk.STOCK_SAVE, Gtk.ResponseType.ACCEPT))
+            dialog = Gtk.FileChooserDialog('Save File', self.window,
+                Gtk.FileChooserAction.SAVE,
+                (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                 Gtk.STOCK_SAVE, Gtk.ResponseType.ACCEPT))
             if default_dir != None:
                 dialog.set_current_folder (default_dir)
             filter = Gtk.FileFilter()
@@ -2006,8 +1999,10 @@ class Window:
         self.open_file (None)
 
     def on_file_open_activate (self, item):
-        dialog = Gtk.FileChooserDialog ("Open File", self.window, Gtk.FILE_CHOOSER_ACTION_OPEN,
-            buttons = (Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT, Gtk.STOCK_OPEN, Gtk.ResponseType.ACCEPT))
+        dialog = Gtk.FileChooserDialog.new('Open File', self.window,
+            Gtk.FileChooserAction.OPEN,
+            (Gtk.STOCK_CANCEL, Gtk.ResponseType.REJECT,
+             Gtk.STOCK_OPEN, Gtk.ResponseType.ACCEPT))
         global default_dir
         if default_dir != None:
             dialog.set_current_folder (default_dir)
