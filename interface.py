@@ -83,13 +83,16 @@ def reverse_lookup (dict, value):
             return i
     return None
 
-def show_error (text):
+def show_error(text):
     windows = Gtk.window_list_toplevels()
     parent = None
     if len (windows) > 0:
         parent = windows[-1]
-    dialog = Gtk.MessageDialog (parent, 0, Gtk.MESSAGE_ERROR,
-        Gtk.ButtonsType.CLOSE, "Error")
+    dialog = Gtk.MessageDialog(modal=True,
+                               message_type=Gtk.MessageType.QUESTION,
+                               buttons=Gtk.ButtonsType.CLOSE,
+                               text='Error')
+    dialog.set_transient_for(parent)
     dialog.format_secondary_text (text)
     dialog.run()
     dialog.destroy()
@@ -667,11 +670,11 @@ class Editor (Gtk.TextView):
         print_op.connect ("draw-page", self.print_page_cb, print_data)
 
         try:
-            res = print_op.run (Gtk.PRINT_OPERATION_ACTION_PRINT_DIALOG, parent_window)
+            res = print_op.run (Gtk.PrintOperationAction.PRINT_DIALOG, parent_window)
         except GObject.GError as ex:
             show_error ("While printing:\n%s" % str(ex))
         else:
-            if res == Gtk.PRINT_OPERATION_RESULT_APPLY:
+            if res == Gtk.PrintOperationResult.APPLY:
                 self.settings = print_op.get_print_settings()
 
     class PrintData:
@@ -911,6 +914,7 @@ def show_preferences():
     if preferences_dialog == None:
         preferences_dialog = PreferencesDialog()
     preferences_dialog.show()
+
 
 ## The table stack pointer renderer
 class CellRendererStackPointer (Gtk.CellRenderer):
@@ -1409,17 +1413,17 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
         self.registers = builder.get_object ("registers_view")
         self.registers.get_selection().set_mode(Gtk.SelectionMode.NONE)
         self.memory = []
-        for i in [1,2]:
-            widget = builder.get_object ("memory_view" + str (i))
+        for i in xrange(2):
+            widget = builder.get_object ("memory_view" + str(i+1))
             self.memory.append (widget)
             widget.get_selection().set_mode (Gtk.SelectionMode.NONE)
         self.memory_label_column2 = builder.get_object ("memory_label_column2")
         self.memory_ptr_columns = []
-        for i in [1,2]:
-            column = builder.get_object ("memory_ptr_column" + str (i))
+        for i in xrange(2):
+            column = builder.get_object ("memory_ptr_column" + str(i+1))
             self.memory_ptr_columns.append (column)
 
-            view = self.memory[i-1]
+            view = self.memory[i]
             cell = CellRendererStackPointer()
             _, _, w1, _ = cell.do_get_size (view, None)
             print 'cell renderer arrow width:', w1
@@ -1428,13 +1432,11 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
                 pointer=VpuModel.RamModel.REGS_POINTER_COL,
                 cell_background_rgba=VpuModel.RamModel.BACKGROUND_COLOR_COL)
 
-            '''
             cell = Gtk.CellRendererText()
             column.pack_start (cell, True)
             column.set_attributes (cell,
                 text=VpuModel.RamModel.REGS_POINTER_TEXT_COL,
                 cell_background_rgba=VpuModel.RamModel.BACKGROUND_COLOR_COL)
-            '''
 
             layout = Pango.Layout (widget.get_pango_context())
             layout.set_text ("rs", -1)
@@ -1654,13 +1656,7 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
             buffer.delete (buffer.get_start_iter(), buffer.get_end_iter())
         else:
             if not self.editor.get_buffer().read (filename):
-                msg = "Couldn't read from file: " + filename
-                dialog = Gtk.MessageDialog (self.get_toplevel(),
-                    Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                    Gtk.MESSAGE_ERROR,
-                    Gtk.ButtonsType.OK, msg)
-                dialog.run()
-                dialog.destroy()
+                show_error("Couldn't read from file: " + filename)
                 filename = None
                 if test_mode: sys.exit (2)
         self.filename = filename
@@ -1670,14 +1666,7 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
         if self.editor.get_buffer().write (filename):
             self.filename = filename
         else:
-            msg = "Couldn't save to file: " + filename
-            dialog = Gtk.MessageDialog (self.get_toplevel(),
-                Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
-                Gtk.MESSAGE_ERROR,
-                Gtk.ButtonsType.OK, msg)
-            dialog.format_secondary_text ("Check file permissions")
-            dialog.run()
-            dialog.destroy()
+            show_error("Couldn't save to file: " + filename)
 
     def file_print (self):
         self.editor.print_text (self.main_parent.window, self.filename)
@@ -2146,9 +2135,10 @@ class Window:
         else:
             msg = "Document modified. "
         msg += "Save changes?"
-        dialog = Gtk.MessageDialog (self.window,
-            Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
-            Gtk.MessageType.QUESTION, Gtk.ButtonsType.NONE, msg)
+        dialog = Gtk.MessageDialog(modal=True, destroy_with_parent=True,
+                                   message_type=Gtk.MessageType.QUESTION,
+                                   text=msg)
+        dialog.set_transient_for(self.window)
         dialog.add_button ("Don't Save", Gtk.ResponseType.REJECT)
         dialog.add_button (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
         dialog.add_button (Gtk.STOCK_SAVE, Gtk.ResponseType.ACCEPT)
@@ -2183,7 +2173,7 @@ class Window:
         if modified == 0:
             return True
 
-        view = Gtk.TreeView (model)
+        view = Gtk.TreeView.new_with_model(model)
         view.set_headers_visible (False)
         view.get_selection().set_mode (Gtk.SelectionMode.NONE)
         view.set_search_column (1)
