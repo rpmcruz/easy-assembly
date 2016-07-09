@@ -917,7 +917,7 @@ def show_preferences():
 
 
 ## The table stack pointer renderer
-class CellRendererStackPointer (Gtk.CellRenderer):
+class CellRendererStackPointer(Gtk.CellRenderer):
     ARROW_WIDTH = ARROW_HEIGHT = 8
     # pointer enum
     POINTER_NONE   = 0
@@ -950,7 +950,7 @@ class CellRendererStackPointer (Gtk.CellRenderer):
     def do_render (self, cr, widget, bg_area, cell_area, flags):
         if self.pointer != self.POINTER_NONE:
             print 'arrow cell - do render:', cell_area, self.pointer
-            cr.set_source_rgb(0, 1, 1);
+            cr.set_source_rgb(0.5, 0.5, 1);
             if self.pointer == self.POINTER_MIDDLE:
                 cr.move_to(self.ARROW_WIDTH/2, 0);
                 cr.line_to(self.ARROW_WIDTH/2, self.ARROW_HEIGHT);
@@ -960,10 +960,6 @@ class CellRendererStackPointer (Gtk.CellRenderer):
                 cr.line_to(self.ARROW_WIDTH, 0);
                 cr.line_to(self.ARROW_WIDTH, self.ARROW_HEIGHT);
                 cr.fill()
-            cr.move_to(0, 0);
-            cr.line_to(100, 100);
-            cr.line_to(100, 0);
-            cr.fill()
 
     def do_get_size (self, widget, cell_area):
         return 0, 0, self.ARROW_WIDTH, self.ARROW_HEIGHT
@@ -1463,12 +1459,12 @@ class Interface (Gtk.EventBox, VpuModel.Listener):
             view2.show()
             paned = view2.get_parent()
             if preferences["mirror_memory_hor"]:
-                paned.set_orientation (Gtk.ORIENTATION_HORIZONTAL)
+                paned.set_orientation (Gtk.Orientation.HORIZONTAL)
                 self.memory_label_column2.set_visible (False)
                 self.memory_ptr_columns[0].set_visible (False)
                 self.memory[1].set_headers_visible (True)
             else:
-                paned.set_orientation (Gtk.ORIENTATION_VERTICAL)
+                paned.set_orientation (Gtk.Orientation.VERTICAL)
                 self.memory_label_column2.set_visible (True)
                 self.memory[1].set_headers_visible (False)
         else:
